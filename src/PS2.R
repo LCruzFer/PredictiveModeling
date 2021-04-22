@@ -65,9 +65,22 @@ predictions = predictions[, -1]
 #bind together in dataframe 
 pred_df = data.frame(cbind(x0, predictions))
 names(pred_df) = c('x0', 'k1', 'k20', 'k200')
+
 #c) 
 plot = ggplot(pred_df, aes(x=x0))
 plot + geom_line(aes(y=k1, color='darkred')) +
        geom_line(aes(y=k20, color='blue')) +
        geom_line(aes(y=k200, color='green')) + 
-       scale_color_manual(labels=c('k=1', 'k=20', 'k=200'))
+       xlab('Test Data') + 
+       ylab('Predicted Arrival Delay') 
+
+#Problem 3 
+#first only keep observations that are not NA 
+subflights = na.omit(flights[, c('arr_delay', 'dep_delay', 'distance', 'day')])
+#sample 2000 random observations from the df w/0 NA by drawing 2000 random numbers from the range 1 to nrow(df)
+flights_train = subflights[sample(nrow(subflights), 2000), ]
+
+best_subset = function(data, dependent){
+  #calculate all 4 criteria for each subset regression
+  #get the potential independent 
+}
