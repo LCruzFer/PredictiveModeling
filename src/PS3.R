@@ -60,4 +60,29 @@ desc_speed=sub_df_2%>%arrange(desc(speed))
 #i) calculate avg delay in departure and arrival by carrier
 avg_arr_delay=flights%>%select(c('carrier', 'arr_delay', 'dep_delay'))%>%group_by(carrier)%>%summarize(across(c(dep_delay, arr_delay), ~mean(.x, na.rm=TRUE)))
 #also calculate percentage of flights delayed (by arrival or by departure) 
-pct_delays=flights%>%select(c('carrier', 'arr_delay', 'dep_delay'))%>%group_by(carrier)%>%summarize(mutate(share=mean(arr_delay>0|dep_delay>0, na.rm=TRUE)))
+delay_shares=flights%>%select(c('carrier', 'arr_delay', 'dep_delay'))%>%group_by(carrier)%>%summarize(share_arrdelay=mean(arr_delay>0, na.rm=TRUE), 
+                                                                                                      share_depdelay=mean(dep_delay>0, na.rm=TRUE),  
+                                                                                                      share_combined=mean(arr_delay>0 | dep_delay>0, na.rm=TRUE))
+#j) calculate mean and variance of air time of flights with same tail number 
+airtime=flights%>%select(c('tailnum', 'air_time'))%>%group_by(tailnum)%>%summarize(mean=mean(air_time, na.rm=TRUE), 
+                                                                                   variance=var(air_time, na.rm=TRUE))
+
+
+#Problem 2
+#a)
+plot=ggplot(flights%>%filter(carrier=='DL'|carrier=='AA'|carrier=='UA'|carrier=='B6')%>%select(c('tailnum', 'arr_delay', 'dep_delay'))%>%group_by(tailnum)%>%summarize(mean_arr=mean(arr_delay, na.rm=TRUE), mean_dep=mean(dep_delay, na.rm=TRUE)), 
+                        aes(mean_arr, mean_dep))
+
+plot+geom_point(color='lightgreen')
+
+
+
+
+
+
+
+
+
+
+
+
