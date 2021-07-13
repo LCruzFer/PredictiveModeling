@@ -70,19 +70,23 @@ airtime=flights%>%select(c('tailnum', 'air_time'))%>%group_by(tailnum)%>%summari
 
 #Problem 2
 #a)
-plot=ggplot(flights%>%filter(carrier=='DL'|carrier=='AA'|carrier=='UA'|carrier=='B6')%>%select(c('tailnum', 'arr_delay', 'dep_delay'))%>%group_by(tailnum)%>%summarize(mean_arr=mean(arr_delay, na.rm=TRUE), mean_dep=mean(dep_delay, na.rm=TRUE)), 
-                        aes(mean_arr, mean_dep))
-
-plot+geom_point(color='lightgreen')
-
-
-
-
-
-
-
-
-
-
-
-
+#plot delay at arrival against delay at departure averaged over flights with same tailnumber 
+#use only flights from DL, AA, UA, B6
+#so let's first filter for relevant carriers and then calculate avg of delays based on tail number 
+carriers=c('DL', 'AA', 'UA', 'B6')
+#WARNING: when using summarize only those columns are kept + the one which is grouped by
+relev_carr=flights%>%filter(carrier %in% carriers)%>%group_by(tailnum)%>%summarize(avg_depdelay=mean(dep_delay, na.rm=TRUE), avg_arrdelay=mean(arr_delay, na.rm=TRUE), carrier=first(carrier))
+#now to the plotting 
+p=ggplot(relev_carr, aes(avg_depdelay, avg_arrdelay))
+p_plot=p+geom_point()+labs(x='Avg. Departure Delay', y='Avg. Arrival Delay', 
+                          title='Avg. delay on arrival and departure')
+#b) color the points by carrier 
+p_colored=p+geom_point(aes(color=carrier), size=0.5)
+#c) use a facet for each of the carriers 
+p_colored+facet_wrap(vars(carrier))
+#d) plot a histogram of arrivale delays and vary bin size, bandwidths and colors
+#basic histogram 
+#here using overlaying histograms of delays at departure and arrival 
+ggplot(data=flights)+geom_histogram(aes(arr_delay), binwidth=10, fill='red')+geom_histogram(aes(dep_delay), bindwith=10, fill='blue', alpha=0.5)
+#specify a number of bins instead of their width 
+ggplot(data=flights)+geom_histogram(aes(arr_delay), bins=20, fill='red')+geom_histogram(aes(dep_delay), bins=20, fill='blue', alpha=0.5)
