@@ -6,6 +6,16 @@ library(glmnet)
 ##############
 #FUNCTIONS
 ##############
+gen_test_train=function(data, test_n=1000){
+  #using data generate a test and a training data set where the test set consists of 
+  #test_n observations and rest are training data
+  slices=sample.int(test_n, n=nrow(data)) 
+  train=data[-slices, ]
+  test=data[slices, ]
+  dat_list=list(train, test)
+  return (dat_list)
+}
+
 run_cvglmnet=function(x, y, a, lambdas='default'){
   #this function fits a cv.glmnet given x, y and alpha values. If lambdas=default,
   #default of cv.glmnet is kept, otherwise provide a sequence of lambdas to be used. 
@@ -28,18 +38,22 @@ comp_glm_ols=function(x, y, a, lambdas='default', how='smallest'){
     #else: use lambda.1se (see cv.glmnet docs) (default for coef(cv.glmnet))
     
   #first run cv.glmnet 
-  glm_res=run_cvglmnet(x=x, y=y, a=a, lambdas=lambdas)
+  glm_res=run_cvglmnet(x, y, a=a, lambdas=lambdas)
   #and ols
   ols=lm(y~x)
-  #save ols coefficients, ignoring constant
-  betas_ols=coefficients(ols)[-1]
   #now get coeffcients of glmnet depending on choice of 'how'
   if (how=='smallest'){
+    #with this method glmnet doesn't return a constant
+    #hence drop from ols betas
+    betas_ols=coefficients(ols)[-1]
     betas_glm=glm_res$glmnet.fit$beta[, ncol(glm_res$glmnet.fit$beta)]
   }else if(how=='min'){
-    betas_glm=coef(glm_res, s='lambda.min')
+    #with coef() glmnet returns a constant coefficient as well
+    betas_ols=coefficients(ols)
+    betas_glm=as.matrix(coef(glm_res, s='lambda.min'))
   }else{
-    betas_glm=coef(glm_res)
+    betas_ols=coefficients(ols)
+    betas_glm=as.matrix(coef(glm_res))
   }
   #then bin them together into one df
   compare_betas=cbind(betas_ols, betas_glm)
@@ -49,6 +63,13 @@ comp_glm_ols=function(x, y, a, lambdas='default', how='smallest'){
   return (compare_df)
 }
 
+oos_mse=function(pred, raw, norm=10^9){
+  #calculate out-of-sample mse using columns pred and raw of data 
+  #normalize mse by norm
+  mse=mean((pred-raw)^2)/norm
+  
+  return (mse)
+}
 ##############
 #Problem 1
 ##############
@@ -93,36 +114,63 @@ y=train_data$Sale_Price
 ##############
 #Problem 2
 ##############
+##RIDGE REGRESSION 
 
 #we have already created test and train set 
-#first fit an OLS using the train set 
-ols=lm(y~x, data=train_data)
-#print summary
-summary(ols)
-#... and see that there are way too much variables for any useful analysis
-#need shrinkage 
-
-##RIDGE REGRESSION 
 
 #perform a ridge regression using cv.glmnet 
 #cv.glmnet automatically conducts CV to find optimal lambda parameter for ridge
 #glmnet performs ridge when setting alpha=0
-cv_ridge=cv.glmnet(x, y, alpha=0)
+#call run_cvglmnet and use default cv.glmnet lambdas
+cv_ridge=run_cvglmnet(x=x, y=y, a=0, lambdas='default')
 #plot MSE along lambdas
 plot(cv_ridge)
 #cv.glmnet returns object with summary on cross validation fit 
 #can fit a glmnet object to the entire data which contains summaries on df, MSE for each lambda 
-cv_glmnet=cv_ridge$glmnet.fit
 #this object has method beta that calculated beta coefficients for each lamdba value and returns
 #them as a n_varsXlambda matrix 
 #to access the betas for the lowest lambda access the last column (sorted from highest to lowest lambda)
-betas_cvglmnet=cv_glmnet$beta[, 100]
-#to compare there to the OLS coefficients of the variables bind them together in a vector
-#ignore constant in OLS coefficients (first element)
-beta_compare=cbind(betas_cvglmnet, coefficients(ols)[-1])
+#all this is done in function 'comp_glm_ols' to find the coefficients and then they are compared
+#to OLS ones
+#first compare OLS to coefficients with smallest lambda using default lambdas
+beta_compare=comp_glm_ols(x=x, y=y, a=0, lambdas='default', how='smallest')
 #the coefficients are quite different as even the smallest lambda is still >> 0
-#compare to what happens when we allow for lambda being almost zero 
-#in fact use lambda grid between 0 and cv_ridge$lambda.min (optimal lambda per CV)
-cv_ridge2=cv.glmnet(x, y, lambda=seq(1e-4, cv_ridge$lambda.min, length.out=20), thresh=1e-14)
-#again compare the coefficients 
-beta_compare2=cbind(cv_ridge2$glmnet.fit$beta[, 20], coefficients(ols)[-1])
+#then compare to coefficients with smallest lambda when lambda starts at zero and goes until
+#optimal lambda returned by cv.glmnet -> cv.glmnet$lambda.min can be accesses from cv_ridge
+beta_compare2=comp_glm_ols(x=x, y=y, a=0, lambdas=seq(1e-4, cv_ridge$lambda.min, length.out=20), how='smallest')
+#these are very similar now as the lambda is almost zero and hence the constraint isn't 
+#constriaing the optimization process
+#what if we compare the OLS coefficients to the optimal ones? 
+beta_compare3=comp_glm_ols(x=x, y=y, a=0, lambdas='default', how='min')
+
+#now predict using test set from ols and from optimal ridge regression and compare the mse
+#set up a dataframe in which we have the true values and the values from the two predictions
+test_pred_data=test_data%>%dplyr::select(Sale_Price)
+#need the ols model for this 
+ols_mod=lm(y~x)
+#and x from test set 
+dim(test_data)
+x_test=model.matrix(Sale_Price~., data=test_data)
+x_test=x_test[, -1]
+#use const from before
+x_test=x_test[, -const]
+#remember: ols prediction similar to the ones when lmabdas almost zero 
+#hence run a cv.glmnet with the lambda=1e-4
+cv_ridge2=run_cvglmnet(x=x, y=y, a=0, lambdas=seq(1e-4, 10, length.out=3))
+#now make 'ols' prediction
+test_pred_data$pred_ols=predict(cv_ridge2, newx=x_test, lambda=1e-4) %>% as.numeric()
+#and prediction for opt lambda in cv.glmnet
+test_pred_data$pred_ridge=predict(cv_ridge, newx=x_test, lambda=cv_ridge$lambda.min)%>%as.numeric()
+
+#now calculate the respective MSEs
+mse_ridge=oos_mse(test_pred_data$pred_ridge, test_pred_data$Sale_Price)
+mse_ols=oos_mse(test_pred_data$pred_ols, test_pred_data$Sale_Price)
+print(mse_ridge)
+print(mse_ols)
+
+##############
+#Problem 3
+##############
+##LASSO REGRESSION 
+#everything the same except alpha in glmnet is now =1 instead of 0
+#add later
