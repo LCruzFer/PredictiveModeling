@@ -4,6 +4,7 @@ library(MASS)
 library(dplyr)
 library(tree)
 library(randomForest)
+library(rpart)
 
 ##############
 #FUNCTIONS
@@ -142,7 +143,7 @@ par(mfrow=c(1, 1))
 test_pred_dat$unpruned_pred=predict(r_tree, newdata=test_dat)
 #and calculate the MSE 
 mse_unpruned=mse(test_pred_dat$unpruned_pred, test_pred_dat$medv)
-print(mse_pruned)
+print(mse_unpruned)
 #the MSEs don't differ much
 
 #e) 
@@ -205,12 +206,11 @@ for (i in 1:max_m){
   #calculate mse
   mse_mtry[[i]]=mse(pred_mat[, i], test_dat$medv)
 }
-
 #g) 
-mse_pruned
-mse_unpruned
-mse_bagging
-mse_mtry
+#save a df with all MSEs - for RF save the ones with mtry=13 (RF automated bagging) and
+#the optimal one (smallest oos.mse) -> mtry=6
+mse_df=data.frame(method=c('Unpruned Tree', 'Pruned Tree', 'Bagging', 'RF bagging', 'RF opt'), 
+                  oos_mse=c(mse_unpruned, mse_pruned, mse_bagging, mse_mtry[[13]], mse_mtry[[which.min(mse_mtry)]]))
 
 #mse is smallest when using randomForest() and consider many variables at split 
 #randomForest() performs substantially better than self coded bagging approach (not sure why
@@ -221,3 +221,11 @@ mse_mtry
 ##############
 # Problem 2
 ##############
+#repeat steps from problem 1 using the rpart library 
+
+#a) Training and test set are already generated in Problem 1 a) 
+
+#just replace all tree libarary functions with the corresponding rpart functions 
+
+#main difference between tree and raprt is how they handle missing values, however, 
+#in the dataset used here there are no NA values 
